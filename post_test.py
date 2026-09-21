@@ -1,26 +1,83 @@
-name: Test Threads Post
+import os
+import time
+import requests
 
-on:
-  workflow_dispatch:
 
-jobs:
-  post:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+access_token = os.environ["THREADS_ACCESS_TOKEN"]
+base_url = "https://graph.threads.com/v1.0"
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+print("Threadsアカウントを確認しています 。")
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
+profile_response = requests.get(
+    f"{base_url}/me",
+    params={
+        "fields": "id,username",
+        "access_token": access_token,
+    },
+    timeout=30,
+)
 
-      - name: Install requests
-        run: pip install requests==2.32.3
+print("プロフィール確認結果:", profile_response.status_code)
 
-      - name: Post test text to Threads
-        env:
-          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-        run: python post_test.py
+if profile_response.status_code != 200:
+    print(profile_response.text)
+    raise SystemExit("Threadsアカウントの確認に失敗しました")
+
+profile = profile_response.json()
+user_id = profile.get("id")
+username = profile.get("username")
+
+if not user_id:
+    print(profile)
+    raise SystemExit("ThreadsユーザーIDを取得できませんでした")
+
+print(f"Threadsユーザー確認完了: @{username}")
+
+text = "Threads APIのテスト投稿です。"
+
+print("投稿用コンテナを作成しています。")
+
+container_response = requests.post(
+    f"{base_url}/{user_id}/threads",
+    data={
+        "media_type": "TEXT",
+        "text": text,
+        "access_token": access_token,
+    },
+    timeout=30,
+)
+
+print("コンテナ作成結果:", container_response.status_code)
+
+if container_response.status_code != 200:
+    print(container_response.text)
+    raise SystemExit("投稿用コンテナの作成に失敗しました")
+
+container_id = container_response.json().get("id")
+
+if not container_id:
+    print(container_response.text)
+    raise SystemExit("コンテナIDを取得できませんでした")
+
+print("30秒待機します。")
+time.sleep(30)
+
+print("Threadsへ公開しています。")
+
+publish_response = requests.post(
+    f"{base_url}/{user_id}/threads_publish",
+    data={
+        "creation_id": container_id,
+        "access_token": access_token,
+    },
+    timeout=30,
+)
+
+print("公開結果:", publish_response.status_code)
+
+if publish_response.status_code != 200:
+    print(publish_response.text)
+    raise SystemExit("Threadsへの公開に失敗しました")
+
+print("テスト投稿が完了しました")
+print(publish_response.text)
